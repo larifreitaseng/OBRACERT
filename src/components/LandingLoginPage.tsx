@@ -41,26 +41,6 @@ export const LandingLoginPage: React.FC<LandingLoginPageProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Quick 1-click access for Eng. Larissa Freitas
-  const handleQuickLarissaLogin = () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setEmail('larifreitaseng@gmail.com');
-    setPassword('obracert123');
-
-    const larissaProfile: UserProfile = {
-      uid: 'user-larissa-01',
-      email: 'larifreitaseng@gmail.com',
-      displayName: 'Eng. Larissa Freitas',
-      systemRole: 'Editor',
-    };
-
-    setSuccessMessage('Acesso autorizado! Carregando painel...');
-    setTimeout(() => {
-      onLoginSuccess(larissaProfile);
-    }, 200);
-  };
-
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
@@ -154,15 +134,10 @@ export const LandingLoginPage: React.FC<LandingLoginPageProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleQuickLarissaLogin}
-            disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 rounded-lg shadow-sm transition-all cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-            <span className="hidden xs:inline">Acesso Rápido</span>
-            <span>(Larissa Freitas)</span>
-          </button>
+          <div className="flex items-center gap-1.5 text-xs text-slate-300 font-medium bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Ambiente Seguro</span>
+          </div>
         </div>
       </header>
 
@@ -282,42 +257,6 @@ export const LandingLoginPage: React.FC<LandingLoginPageProps> = ({
                 </div>
               </div>
 
-              {/* Master Credential Callout Box (Answering the user's specific prompt) */}
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-xl p-3.5 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                    <span className="text-xs font-bold text-slate-900">
-                      Perfil Principal de Larissa Freitas:
-                    </span>
-                  </div>
-                  <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-1.5 py-0.5 rounded">
-                    Editor Master
-                  </span>
-                </div>
-
-                <div className="text-xs font-mono bg-white/90 border border-amber-200 p-2 rounded-lg space-y-1 text-slate-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-sans text-[11px]">E-mail:</span>
-                    <strong className="text-slate-900 font-semibold select-all">larifreitaseng@gmail.com</strong>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-1">
-                    <span className="text-slate-500 font-sans text-[11px]">Senha:</span>
-                    <strong className="text-amber-800 font-bold tracking-wider select-all">obracert123</strong>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleQuickLarissaLogin}
-                  disabled={isLoading}
-                  className="w-full py-2 px-3 text-xs font-bold bg-amber-500 hover:bg-amber-600 active:scale-98 text-slate-950 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
-                >
-                  <LogIn className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Acessar Imediatamente como Larissa</span>
-                </button>
-              </div>
-
               {/* Error & Success Messages */}
               {errorMessage && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in">
@@ -345,7 +284,7 @@ export const LandingLoginPage: React.FC<LandingLoginPageProps> = ({
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="larifreitaseng@gmail.com"
+                      placeholder="seu.email@empresa.com.br"
                       className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                     />
                   </div>
