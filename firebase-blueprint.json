@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "Company": {
+      "title": "Company",
+      "description": "Construtora ou empresa prestadora de serviços cadastrada",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 150 },
+        "tradeName": { "type": "string", "maxLength": 150 },
+        "cnpj": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "address": { "type": "string", "maxLength": 250 },
+        "responsibleEngineer": { "type": "string", "maxLength": 100 },
+        "crea": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name", "cnpj"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Obra da construção civil acompanhada pelo sistema",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 150 },
+        "code": { "type": "string", "maxLength": 50 },
+        "companyId": { "type": "string", "maxLength": 128 },
+        "companyName": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 250 },
+        "residentEngineer": { "type": "string", "maxLength": 100 },
+        "crea": { "type": "string", "maxLength": 50 },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "expectedEndDate": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "maxLength": 30 },
+        "overallProgressPercent": { "type": "number" },
+        "googleDriveFolderUrl": { "type": "string", "maxLength": 500 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name", "status"]
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "Membro da equipe técnica da obra",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "maxLength": 80 },
+        "email": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "creaOrCau": { "type": "string", "maxLength": 50 },
+        "systemRole": { "type": "string", "enum": ["Editor", "Visualizador"] },
+        "companyId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name", "role", "systemRole"]
+    },
+    "Rdo": {
+      "title": "Rdo",
+      "description": "Relatório Diário de Obra preenchido com dados de campo e IA",
+      "type": "object",
+      "properties": {
+        "rdoNumber": { "type": "string", "maxLength": 50 },
+        "projectId": { "type": "string", "maxLength": 128 },
+        "projectName": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string", "maxLength": 20 },
+        "weatherMorning": { "type": "string", "maxLength": 50 },
+        "weatherAfternoon": { "type": "string", "maxLength": 50 },
+        "weatherNight": { "type": "string", "maxLength": 50 },
+        "workforce": { "type": "array" },
+        "totalWorkers": { "type": "number" },
+        "equipment": { "type": "array" },
+        "activities": { "type": "array" },
+        "materials": { "type": "array" },
+        "occurrences": { "type": "string", "maxLength": 5000 },
+        "generalNotes": { "type": "string", "maxLength": 5000 },
+        "photoAttachments": { "type": "array" },
+        "googleDriveLink": { "type": "string", "maxLength": 500 },
+        "audioTranscript": { "type": "string", "maxLength": 5000 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 120 },
+        "authorEmail": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["rdoNumber", "projectId", "date"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil de usuário com email e senha ou Google Auth",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 120 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "systemRole": { "type": "string", "enum": ["Editor", "Visualizador"] },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["uid", "email", "systemRole"]
+    }
+  },
+  "firestore": {
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Cadastro de empresas construtoras e subcontratadas"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Obras acompanhadas pelo sistema"
+    },
+    "/team/{memberId}": {
+      "schema": "TeamMember",
+      "description": "Equipe técnica e operadores com perfis Editor e Visualizador"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Perfis de usuários registrados no sistema"
+    },
+    "/rdos/{rdoId}": {
+      "schema": "Rdo",
+      "description": "Relatórios Diários de Obra gerados"
+    }
+  }
+}

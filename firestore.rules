@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Companies
+    match /companies/{companyId} {
+      allow read, write: if isValidId(companyId);
+    }
+
+    // Projects / Obras
+    match /projects/{projectId} {
+      allow read, write: if isValidId(projectId);
+    }
+
+    // Team members
+    match /team/{memberId} {
+      allow read, write: if isValidId(memberId);
+    }
+
+    // Users and Profiles (Email and Password / Google Auth)
+    match /users/{userId} {
+      allow read, write: if isValidId(userId);
+    }
+
+    // RDOs (Relatórios Diários de Obra)
+    match /rdos/{rdoId} {
+      allow read, write: if isValidId(rdoId);
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
+
