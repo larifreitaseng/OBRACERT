@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
-import { parseAudioOrTextForRdo } from './src/server/geminiBackend';
+import { parseAudioOrTextForRdo } from './src/server/geminiBackend.ts';
 
 dotenv.config();
 
@@ -9,6 +9,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '50mb' }));
+
+// Health check endpoint for Cloud Run
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
 
 // API endpoint for parsing audio / text RDO
 app.post('/api/parse-audio-rdo', async (req, res) => {
@@ -22,13 +27,13 @@ app.post('/api/parse-audio-rdo', async (req, res) => {
 });
 
 // Serve static frontend files
-const distPath = path.resolve(__dirname, 'dist');
+const distPath = path.resolve(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`Server listening on port ${PORT} (0.0.0.0)`);
 });

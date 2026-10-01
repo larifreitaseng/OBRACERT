@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { ParsedRdoFromAi } from '../types';
+import type { ParsedRdoFromAi } from '../types/index.ts';
 
 let genAiInstance: GoogleGenAI | null = null;
 

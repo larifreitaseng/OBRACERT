@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import dotenv from 'dotenv';
 import { defineConfig, Plugin } from 'vite';
-import { parseAudioOrTextForRdo } from './src/server/geminiBackend';
+import { parseAudioOrTextForRdo } from './src/server/geminiBackend.ts';
 
 dotenv.config();
 
@@ -49,7 +49,7 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss(), rdoApiPlugin()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(process.cwd(), '.'),
       },
     },
     server: {
