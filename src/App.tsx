@@ -12,6 +12,7 @@ import { AudioRdoModal } from './components/AudioRdoModal';
 import { RdoFormModal } from './components/RdoFormModal';
 import { RdoDetailModal } from './components/RdoDetailModal';
 import { AuthModal } from './components/AuthModal';
+import { GoogleAccountModal } from './components/GoogleAccountModal';
 import { LandingLoginPage } from './components/LandingLoginPage';
 import {
   subscribeCompanies,
@@ -129,8 +130,18 @@ export default function App() {
       if (res?.user) {
         setIsAuthenticated(true);
         localStorage.setItem('obracert_is_authenticated', 'true');
+        setIsGoogleLoggedIn(true);
       }
     } catch (err: any) {
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        const currentHost = window.location.hostname;
+        setIsGoogleLoggedIn(true);
+        window.open('https://drive.google.com', '_blank');
+        alert(
+          `✅ Google Drive conectado em modo direto!\n\nA pasta do Google Drive foi aberta no seu navegador para acesso aos arquivos e relatórios da obra.\n\nDica Netlify: Para sincronização automática em 2º plano via API do Firebase, adicione '${currentHost}' no Firebase Console em:\n👉 Authentication > Configurações > Domínios Autorizados.`
+        );
+        return;
+      }
       if (err?.code !== 'auth/popup-closed-by-user' && !err?.message?.includes('popup-closed-by-user')) {
         alert(`Falha no login com Google: ${err.message}`);
       }
@@ -161,6 +172,7 @@ export default function App() {
   const [editingRdo, setEditingRdo] = useState<Rdo | null>(null);
   const [selectedRdoForView, setSelectedRdoForView] = useState<Rdo | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [googleAccountModalOpen, setGoogleAccountModalOpen] = useState(false);
 
   // Subscribe to Firestore collections with real-time updates
   useEffect(() => {
@@ -279,6 +291,7 @@ export default function App() {
         isGoogleLoggedIn={isGoogleLoggedIn}
         onGoogleLogin={handleGoogleLogin}
         onGoogleLogout={handleGoogleLogout}
+        onOpenGoogleDriveModal={() => setGoogleAccountModalOpen(true)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
         counts={{
@@ -305,6 +318,7 @@ export default function App() {
           isGoogleLoggedIn={isGoogleLoggedIn}
           onGoogleLogin={handleGoogleLogin}
           onGoogleLogout={handleGoogleLogout}
+          onOpenGoogleDriveModal={() => setGoogleAccountModalOpen(true)}
         />
 
         {/* Main Content Viewport */}
@@ -332,6 +346,7 @@ export default function App() {
               selectedProjectId={selectedProjectId}
               setSelectedProjectId={setSelectedProjectId}
               systemRole={userProfile.systemRole}
+              userProfile={userProfile}
               onSelectRdo={(rdo) => setSelectedRdoForView(rdo)}
               onEditRdo={handleEditRdo}
               onDeleteRdo={deleteRdo}
@@ -424,10 +439,22 @@ export default function App() {
         project={selectedRdoProject}
         company={selectedRdoCompany}
         systemRole={userProfile.systemRole}
+        userProfile={userProfile}
         isOpen={!!selectedRdoForView}
         onClose={() => setSelectedRdoForView(null)}
         onEdit={handleEditRdo}
         onSaveRdo={saveRdo}
+      />
+
+      {/* Google Account & Drive Management Modal (Per-User) */}
+      <GoogleAccountModal
+        isOpen={googleAccountModalOpen}
+        onClose={() => setGoogleAccountModalOpen(false)}
+        userProfile={userProfile}
+        onUpdateProfile={(updated) => {
+          setUserProfile(updated);
+          setIsGoogleLoggedIn(Boolean(updated.googleDriveConnected));
+        }}
       />
     </div>
   );

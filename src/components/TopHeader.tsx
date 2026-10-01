@@ -24,6 +24,7 @@ interface TopHeaderProps {
   isGoogleLoggedIn?: boolean;
   onGoogleLogin?: () => void;
   onGoogleLogout?: () => void;
+  onOpenGoogleDriveModal?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -35,6 +36,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   isGoogleLoggedIn,
   onGoogleLogin,
   onGoogleLogout,
+  onOpenGoogleDriveModal,
 }) => {
   const getTabInfo = () => {
     switch (currentTab) {
@@ -117,24 +119,27 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Right Side: Clean Status Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Google Drive Status Indicator */}
-          {isGoogleLoggedIn ? (
-            <div
-              title="Segunda Memória Google Drive Conectada"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200/80 rounded-lg text-emerald-800 text-xs font-semibold shadow-2xs"
+          {/* Google Drive Status Indicator (Individual User Account) */}
+          {userProfile.googleDriveConnected ? (
+            <button
+              onClick={onOpenGoogleDriveModal}
+              title={`Conta Google Conectada: ${userProfile.googleDriveEmail || userProfile.email}. Clique para gerenciar.`}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-300 rounded-lg text-emerald-900 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <FolderOpen className="w-3.5 h-3.5 text-emerald-700" />
-              <span className="hidden sm:inline">Drive Conectado</span>
-            </div>
+              <span className="hidden sm:inline font-bold">
+                {userProfile.googleDriveEmail ? userProfile.googleDriveEmail.split('@')[0] : 'Drive Ativo'}
+              </span>
+            </button>
           ) : (
             <button
-              onClick={onGoogleLogin}
-              title="Conectar ao Google Drive"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:text-slate-900 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+              onClick={onOpenGoogleDriveModal}
+              title="Conectar sua conta Google Drive pessoal ou corporativa"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-900 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
             >
               <FolderOpen className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden sm:inline">Conectar Drive</span>
+              <span className="hidden sm:inline">Conectar meu Drive</span>
             </button>
           )}
 

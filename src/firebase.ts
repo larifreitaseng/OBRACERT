@@ -57,6 +57,10 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 // Use drive.file (recommended non-restricted scope) to create and manage obra folders, photos, and PDFs
 googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+// Force account selection prompt so each user can select their personal or corporate Google account
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
 
 // In-memory token cache for Google Workspace APIs (Drive, etc.)
 let cachedAccessToken: string | null = null;
@@ -67,6 +71,87 @@ export function getCachedAccessToken(): string | null {
 
 export function setCachedAccessToken(token: string | null): void {
   cachedAccessToken = token;
+}
+
+/**
+ * Retorna o token de acesso do Google Drive específico para o usuário (por UID)
+ */
+export function getUserDriveToken(uid?: string): string | null {
+  if (uid && typeof window !== 'undefined') {
+    const userToken = localStorage.getItem(`obracert_drive_token_${uid}`);
+    if (userToken) return userToken;
+  }
+  return cachedAccessToken;
+}
+
+/**
+ * Salva ou remove o token de acesso do Google Drive para o usuário específico
+ */
+export function setUserDriveToken(token: string | null, uid?: string): void {
+  cachedAccessToken = token;
+  if (uid && typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem(`obracert_drive_token_${uid}`, token);
+    } else {
+      localStorage.removeItem(`obracert_drive_token_${uid}`);
+    }
+  }
+}
+
+/**
+ * Conecta a conta pessoal/corporativa do Google Drive para o usuário atual
+ */
+export async function connectUserGoogleDrive(currentProfile: UserProfile): Promise<{
+  updatedProfile: UserProfile;
+  accessToken: string;
+}> {
+  try {
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
+    const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken;
+    if (!accessToken) {
+      throw new Error('Não foi possível obter o token de acesso do Google Drive.');
+    }
+
+    setUserDriveToken(accessToken, currentProfile.uid);
+
+    const googleEmail = result.user.email || currentProfile.email;
+    const googleName = result.user.displayName || currentProfile.displayName;
+    const googleAvatar = result.user.photoURL || undefined;
+
+    const updatedProfile: UserProfile = {
+      ...currentProfile,
+      googleDriveConnected: true,
+      googleDriveEmail: googleEmail,
+      googleDriveName: googleName,
+      googleDriveAvatar: googleAvatar,
+      googleDriveLinkedAt: new Date().toISOString(),
+    };
+
+    await saveUserProfile(updatedProfile);
+    return { updatedProfile, accessToken };
+  } catch (error: any) {
+    console.error('Erro ao conectar Google Drive do usuário:', error);
+    throw error;
+  }
+}
+
+/**
+ * Desconecta a conta Google Drive do usuário atual
+ */
+export async function disconnectUserGoogleDrive(currentProfile: UserProfile): Promise<UserProfile> {
+  setUserDriveToken(null, currentProfile.uid);
+  const updatedProfile: UserProfile = {
+    ...currentProfile,
+    googleDriveConnected: false,
+    googleDriveEmail: undefined,
+    googleDriveName: undefined,
+    googleDriveAvatar: undefined,
+    googleDriveLinkedAt: undefined,
+  };
+  await saveUserProfile(updatedProfile);
+  return updatedProfile;
 }
 
 export enum OperationType {
@@ -313,6 +398,12 @@ export async function fetchUserProfile(uid: string, fallbackEmail: string, fallb
         displayName: data.displayName || fallbackName,
         systemRole: (data.systemRole as SystemRole) || 'Editor',
         photoURL: data.photoURL,
+        googleDriveConnected: Boolean(data.googleDriveConnected),
+        googleDriveEmail: data.googleDriveEmail,
+        googleDriveName: data.googleDriveName,
+        googleDriveAvatar: data.googleDriveAvatar,
+        googleDriveLinkedAt: data.googleDriveLinkedAt,
+        googleDriveFolderUrl: data.googleDriveFolderUrl,
       };
     }
   } catch (err) {
@@ -336,6 +427,9 @@ export async function fetchUserProfile(uid: string, fallbackEmail: string, fallb
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
   try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('obracert_active_user', JSON.stringify(profile));
+    }
     const userDocRef = doc(db, 'users', profile.uid);
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1500));
     await Promise.race([
@@ -346,6 +440,13 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
           email: profile.email,
           displayName: profile.displayName,
           systemRole: profile.systemRole,
+          photoURL: profile.photoURL || null,
+          googleDriveConnected: Boolean(profile.googleDriveConnected),
+          googleDriveEmail: profile.googleDriveEmail || null,
+          googleDriveName: profile.googleDriveName || null,
+          googleDriveAvatar: profile.googleDriveAvatar || null,
+          googleDriveLinkedAt: profile.googleDriveLinkedAt || null,
+          googleDriveFolderUrl: profile.googleDriveFolderUrl || null,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }

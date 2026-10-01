@@ -19,7 +19,7 @@ import {
   ChevronDown,
   Download
 } from 'lucide-react';
-import { Rdo, Project, Company, SystemRole } from '../types';
+import { Rdo, Project, Company, SystemRole, UserProfile } from '../types';
 import { generateRdoPdf } from '../services/pdfService';
 import { backupRdoToDrive } from '../services/driveService';
 
@@ -30,6 +30,7 @@ interface RdoListProps {
   selectedProjectId: string;
   setSelectedProjectId: (id: string) => void;
   systemRole: SystemRole;
+  userProfile?: UserProfile;
   onSelectRdo: (rdo: Rdo) => void;
   onEditRdo: (rdo: Rdo) => void;
   onDeleteRdo: (id: string) => Promise<void>;
@@ -45,6 +46,7 @@ export const RdoList: React.FC<RdoListProps> = ({
   selectedProjectId,
   setSelectedProjectId,
   systemRole,
+  userProfile,
   onSelectRdo,
   onEditRdo,
   onDeleteRdo,
@@ -62,12 +64,16 @@ export const RdoList: React.FC<RdoListProps> = ({
     try {
       const proj = projects.find((p) => p.id === rdo.projectId);
       const comp = companies.find((c) => c.id === proj?.companyId) || companies[0];
-      const res = await backupRdoToDrive(rdo, proj, comp);
+      const res = await backupRdoToDrive(rdo, proj, comp, undefined, userProfile?.uid);
       if (res.success) {
         if (onSaveRdo && res.updatedRdo) {
           await onSaveRdo(res.updatedRdo);
         }
-        alert(`✅ RDO ${rdo.rdoNumber} salvo no Google Drive com sucesso!\n\nPasta da Obra: ${res.folderName}\nPDF Oficial: ${res.pdfName || 'Gerado'}\nFotos sincronizadas: ${res.photosUploaded}`);
+        if ((res as any).note) {
+          alert(`✅ ${(res as any).note}`);
+        } else {
+          alert(`✅ RDO ${rdo.rdoNumber} salvo no Google Drive com sucesso!\n\nPasta da Obra: ${res.folderName}\nPDF Oficial: ${res.pdfName || 'Gerado'}\nFotos sincronizadas: ${res.photosUploaded}`);
+        }
       } else {
         if (!res.error?.includes('cancelad')) {
           alert(`Aviso: ${res.error}`);

@@ -17,7 +17,7 @@ import {
   Camera,
   Download
 } from 'lucide-react';
-import { Rdo, Project, Company, SystemRole } from '../types';
+import { Rdo, Project, Company, SystemRole, UserProfile } from '../types';
 import { generateRdoPdf } from '../services/pdfService';
 import { backupRdoToDrive } from '../services/driveService';
 
@@ -26,6 +26,7 @@ interface RdoDetailModalProps {
   project?: Project;
   company?: Company;
   systemRole: SystemRole;
+  userProfile?: UserProfile;
   isOpen: boolean;
   onClose: () => void;
   onEdit: (rdo: Rdo) => void;
@@ -37,6 +38,7 @@ export const RdoDetailModal: React.FC<RdoDetailModalProps> = ({
   project,
   company,
   systemRole,
+  userProfile,
   isOpen,
   onClose,
   onEdit,
@@ -55,15 +57,25 @@ export const RdoDetailModal: React.FC<RdoDetailModalProps> = ({
     setIsBackingUp(true);
     setBackupStep('Iniciando envio para o Google Drive...');
     try {
-      const res = await backupRdoToDrive(rdo, project, company, (step) => {
-        setBackupStep(step);
-      });
+      const res = await backupRdoToDrive(
+        rdo,
+        project,
+        company,
+        (step) => {
+          setBackupStep(step);
+        },
+        userProfile?.uid
+      );
 
       if (res.success) {
         if (onSaveRdo && res.updatedRdo) {
           await onSaveRdo(res.updatedRdo);
         }
-        alert(`✅ Segunda Memória criada no Google Drive com sucesso!\n\nPasta da Obra: ${res.folderName}\nPDF Oficial: ${res.pdfName || 'Gerado'}\nFotos sincronizadas: ${res.photosUploaded}`);
+        if ((res as any).note) {
+          alert(`✅ ${(res as any).note}`);
+        } else {
+          alert(`✅ Segunda Memória criada no Google Drive com sucesso!\n\nPasta da Obra: ${res.folderName}\nPDF Oficial: ${res.pdfName || 'Gerado'}\nFotos sincronizadas: ${res.photosUploaded}`);
+        }
       } else {
         if (!res.error?.includes('cancelad')) {
           alert(`Aviso: ${res.error}`);

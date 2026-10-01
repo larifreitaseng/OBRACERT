@@ -466,7 +466,7 @@ export const RdoFormModal: React.FC<RdoFormModalProps> = ({
 
       if (backupToDrive) {
         const selectedCompany = companies.find((c) => c.id === selectedProject?.companyId) || companies[0];
-        backupRdoToDrive(finalRdo, selectedProject, selectedCompany).then(async (res) => {
+        backupRdoToDrive(finalRdo, selectedProject, selectedCompany, undefined, userProfile.uid).then(async (res) => {
           if (res.success) {
             await onSave(res.updatedRdo);
           }
@@ -515,9 +515,15 @@ export const RdoFormModal: React.FC<RdoFormModalProps> = ({
         updatedAt: new Date().toISOString(),
       };
 
-      const res = await backupRdoToDrive(tempRdo, selectedProject, selectedCompany, (step) => {
-        setBackupProgressMsg(step);
-      });
+      const res = await backupRdoToDrive(
+        tempRdo,
+        selectedProject,
+        selectedCompany,
+        (step) => {
+          setBackupProgressMsg(step);
+        },
+        userProfile.uid
+      );
 
       if (res.success) {
         setGoogleDriveLink(res.folderUrl);
@@ -526,7 +532,11 @@ export const RdoFormModal: React.FC<RdoFormModalProps> = ({
           setPhotos(res.updatedRdo.photoAttachments);
         }
         await onSave(res.updatedRdo);
-        alert(`✅ Segunda Memória criada com sucesso no Google Drive!\n\nPasta da Obra: ${res.folderName}\nRelatório PDF: ${res.pdfName || 'Criado'}\nFotos sincronizadas: ${res.photosUploaded}`);
+        if ((res as any).note) {
+          alert(`✅ ${(res as any).note}`);
+        } else {
+          alert(`✅ Segunda Memória criada com sucesso no Google Drive!\n\nPasta da Obra: ${res.folderName}\nRelatório PDF: ${res.pdfName || 'Criado'}\nFotos sincronizadas: ${res.photosUploaded}`);
+        }
       } else {
         if (!res.error?.includes('cancelad')) {
           alert(`Aviso: ${res.error}`);

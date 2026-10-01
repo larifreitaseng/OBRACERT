@@ -6,6 +6,12 @@ export interface UserProfile {
   displayName: string;
   systemRole: SystemRole;
   photoURL?: string;
+  googleDriveConnected?: boolean;
+  googleDriveEmail?: string;
+  googleDriveName?: string;
+  googleDriveAvatar?: string;
+  googleDriveLinkedAt?: string;
+  googleDriveFolderUrl?: string;
 }
 
 export interface Company {

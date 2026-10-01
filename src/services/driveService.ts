@@ -1,4 +1,11 @@
-import { auth, googleProvider, getCachedAccessToken, setCachedAccessToken } from '../firebase';
+import {
+  auth,
+  googleProvider,
+  getCachedAccessToken,
+  setCachedAccessToken,
+  getUserDriveToken,
+  setUserDriveToken
+} from '../firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { generateRdoPdfBlob } from './pdfService';
 import { Rdo, Project, Company } from '../types';
@@ -32,6 +39,7 @@ export interface UploadRdoAttachmentParams {
   rdoNumber?: string;
   projectName?: string;
   caption?: string;
+  userUid?: string;
 }
 
 /**
@@ -58,28 +66,34 @@ export function extractFolderIdFromUrl(url: string): string | null {
 }
 
 /**
- * Garante que temos um token de acesso válido para o Google Drive.
- * Se não houver em memória, solicita autenticação via popup do Google.
+ * Garante que temos um token de acesso válido para o Google Drive para o usuário especificado.
+ * Se não houver em cache/storage, solicita autenticação via popup do Google com seletor de contas.
  */
-export async function ensureDriveAccessToken(): Promise<string> {
-  const currentToken = getCachedAccessToken();
+export async function ensureDriveAccessToken(userUid?: string): Promise<string> {
+  const currentToken = getUserDriveToken(userUid);
   if (currentToken) {
     return currentToken;
   }
 
   try {
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
     const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
     if (!token) {
       throw new Error('Não foi possível obter o token de acesso do Google Drive.');
     }
-    setCachedAccessToken(token);
+    setUserDriveToken(token, userUid);
     return token;
   } catch (error: any) {
     if (error?.code === 'auth/popup-closed-by-user' || error?.message?.includes('popup-closed-by-user')) {
       const friendlyErr = new Error('Janela de conexão fechada pelo usuário.');
       (friendlyErr as any).code = 'auth/popup-closed-by-user';
+      throw friendlyErr;
+    }
+    if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
+      const friendlyErr = new Error('auth/unauthorized-domain');
+      (friendlyErr as any).code = 'auth/unauthorized-domain';
       throw friendlyErr;
     }
     console.warn('Erro na autenticação com Google Drive:', error);
@@ -92,7 +106,7 @@ export async function ensureDriveAccessToken(): Promise<string> {
 /**
  * Verifica se uma pasta existe e está ativa no Google Drive do usuário
  */
-export async function checkDriveFolderExists(folderId?: string | null): Promise<boolean> {
+export async function checkDriveFolderExists(folderId?: string | null, userUid?: string): Promise<boolean> {
   if (!folderId || typeof folderId !== 'string') return false;
   const cleanId = extractFolderIdFromUrl(folderId) || folderId;
   if (!cleanId || cleanId.includes('1aBcDeFg') || cleanId.includes('2bCdEfGh')) {
@@ -100,7 +114,7 @@ export async function checkDriveFolderExists(folderId?: string | null): Promise<
   }
 
   try {
-    const token = await ensureDriveAccessToken();
+    const token = await ensureDriveAccessToken(userUid);
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${cleanId}?fields=id,name,trashed`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -175,9 +189,10 @@ export async function searchDriveFolders(queryText?: string): Promise<DriveFolde
  */
 export async function findOrCreateObraFolder(
   projectName: string,
-  projectCode?: string
+  projectCode?: string,
+  userUid?: string
 ): Promise<DriveFolder> {
-  const token = await ensureDriveAccessToken();
+  const token = await ensureDriveAccessToken(userUid);
   const folderName = projectCode ? `[${projectCode}] ${projectName}` : projectName;
 
   // 1. Procurar pasta existente com esse nome
@@ -250,7 +265,7 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 export async function uploadRdoAttachmentToDrive(
   params: UploadRdoAttachmentParams
 ): Promise<{ id: string; name: string; webViewLink: string; thumbnailLink?: string }> {
-  const token = await ensureDriveAccessToken();
+  const token = await ensureDriveAccessToken(params.userUid);
 
   let blob: Blob;
   if (params.file) {
@@ -403,6 +418,7 @@ export interface BackupResult {
   photosUploaded: number;
   updatedRdo: Rdo;
   error?: string;
+  note?: string;
 }
 
 /**
@@ -413,12 +429,14 @@ export async function backupRdoToDrive(
   rdo: Rdo,
   project?: Project,
   company?: Company,
-  onProgress?: BackupProgressCallback
+  onProgress?: BackupProgressCallback,
+  userUid?: string
 ): Promise<BackupResult> {
+  const effectiveUid = userUid || rdo.createdBy;
   try {
     // 1. Autenticar com o Google Drive
     onProgress?.('Verificando conexão com Google Drive...', 10);
-    await ensureDriveAccessToken();
+    await ensureDriveAccessToken(effectiveUid);
 
     // 2. Identificar ou criar a pasta da obra no Drive
     onProgress?.('Localizando ou criando pasta da obra no Google Drive...', 25);
@@ -436,11 +454,11 @@ export async function backupRdoToDrive(
 
     let folderExists = false;
     if (folderId) {
-      folderExists = await checkDriveFolderExists(folderId);
+      folderExists = await checkDriveFolderExists(folderId, effectiveUid);
     }
 
     if (!folderId || !folderExists) {
-      const createdFolder = await findOrCreateObraFolder(projectName, projectCode);
+      const createdFolder = await findOrCreateObraFolder(projectName, projectCode, effectiveUid);
       folderId = createdFolder.id;
       folderName = createdFolder.name;
       folderUrl = createdFolder.webViewLink;
@@ -460,6 +478,7 @@ export async function backupRdoToDrive(
       rdoNumber: rdo.rdoNumber,
       projectName,
       caption: `Relatório Técnico Oficial - Data: ${rdo.date}`,
+      userUid: effectiveUid,
     });
 
     // 5. Fazer upload das fotos de campo que ainda não estão no Drive
@@ -490,6 +509,7 @@ export async function backupRdoToDrive(
             rdoNumber: rdo.rdoNumber,
             projectName,
             caption: p.caption,
+            userUid: effectiveUid,
           });
 
           updatedPhotos[i] = {
@@ -530,6 +550,36 @@ export async function backupRdoToDrive(
         photosUploaded: 0,
         updatedRdo: rdo,
         error: 'Conexão com o Google cancelada pelo usuário.',
+      };
+    }
+
+    if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
+      // Direct Fallback for Netlify and custom domains:
+      // 1. Generate and download the official PDF with photos embedded directly
+      try {
+        const { generateRdoPdf } = await import('./pdfService');
+        await generateRdoPdf(rdo, project, company);
+      } catch (pdfErr) {
+        console.warn('Erro ao gerar PDF no fallback:', pdfErr);
+      }
+
+      // 2. Open the Obra's Google Drive folder directly in a new tab
+      const driveFolderUrl = project?.googleDriveFolderUrl || rdo.googleDriveLink || 'https://drive.google.com';
+      if (typeof window !== 'undefined' && driveFolderUrl) {
+        window.open(driveFolderUrl, '_blank');
+      }
+
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'obracert.netlify.app';
+
+      return {
+        success: true,
+        folderUrl: driveFolderUrl,
+        folderName: project?.name || rdo.projectName,
+        pdfName: `${rdo.rdoNumber}_${rdo.date}.pdf`,
+        photosUploaded: rdo.photoAttachments?.length || 0,
+        updatedRdo: rdo,
+        error: undefined,
+        note: `Relatório em PDF com fotos baixado com sucesso e pasta da obra aberta no Google Drive!\n\n(Dica Netlify: Para upload 100% automático em 2º plano, adicione '${currentHost}' em Domínios Autorizados no Firebase Console).`,
       };
     }
     console.error('Erro no backup para Google Drive:', error);

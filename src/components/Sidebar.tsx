@@ -31,6 +31,7 @@ interface SidebarProps {
   isGoogleLoggedIn?: boolean;
   onGoogleLogin?: () => void;
   onGoogleLogout?: () => void;
+  onOpenGoogleDriveModal?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   counts?: {
@@ -54,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isGoogleLoggedIn,
   onGoogleLogin,
   onGoogleLogout,
+  onOpenGoogleDriveModal,
   isCollapsed = false,
   onToggleCollapse,
   counts = { rdos: 0, projects: 0, companies: 0, team: 0 },
@@ -419,6 +421,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : 'LF'}
               </button>
 
+              {/* Collapsed Drive Button */}
+              <button
+                onClick={onOpenGoogleDriveModal}
+                title={userProfile.googleDriveConnected ? `Google Drive Conectado: ${userProfile.googleDriveEmail || userProfile.email}` : 'Conectar ao Google Drive'}
+                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer relative ${
+                  userProfile.googleDriveConnected
+                    ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <FolderOpen className="w-4 h-4" />
+                {userProfile.googleDriveConnected && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 absolute top-2 right-2 animate-pulse"></span>
+                )}
+              </button>
+
               {/* Collapsed Logout Button */}
               <button
                 onClick={onLogout}
@@ -466,6 +484,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {userProfile.systemRole}
                 </button>
               </div>
+
+              {/* Google Drive Account Button (Per-User) */}
+              <button
+                onClick={onOpenGoogleDriveModal}
+                className={`w-full flex items-center justify-between py-2 px-3 text-xs font-semibold rounded-xl border transition-colors cursor-pointer ${
+                  userProfile.googleDriveConnected
+                    ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300 hover:bg-emerald-900/40'
+                    : 'bg-slate-850 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${userProfile.googleDriveConnected ? 'text-emerald-400' : 'text-blue-400'}`} />
+                  <span className="truncate">
+                    {userProfile.googleDriveConnected
+                      ? (userProfile.googleDriveEmail || 'Drive Conectado')
+                      : 'Conectar meu Drive'}
+                  </span>
+                </div>
+                {userProfile.googleDriveConnected && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"></span>
+                )}
+              </button>
 
               {/* Sair do Sistema Button */}
               <button

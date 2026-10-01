@@ -1,6 +1,49 @@
 import { jsPDF } from 'jspdf';
 import { Rdo, Project, Company } from '../types';
 
+// Helper to load image as DataURL for jsPDF embedding
+async function loadImgData(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  if (!url) return null;
+  if (url.startsWith('data:image')) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ dataUrl: url, width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+      };
+      img.onerror = () => {
+        resolve({ dataUrl: url, width: 800, height: 600 });
+      };
+      img.src = url;
+    });
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width || 800;
+        canvas.height = img.naturalHeight || img.height || 600;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          resolve({ dataUrl, width: canvas.width, height: canvas.height });
+          return;
+        }
+      } catch (e) {
+        console.warn('Canvas conversion note:', e);
+      }
+      resolve(null);
+    };
+    img.onerror = () => {
+      resolve(null);
+    };
+    img.src = url;
+  });
+}
+
 export async function buildRdoPdfDoc(
   rdo: Rdo,
   project?: Project,
@@ -362,24 +405,88 @@ export async function buildRdoPdfDoc(
     doc.text(`7. REGISTRO FOTOGRÁFICO DO CANTEIRO (${rdo.photoAttachments.length} Fotos)`, margin + 3, y + 4.2);
     y += 9;
 
-    rdo.photoAttachments.forEach((p, pIdx) => {
-      checkPageBreak(12);
-      doc.setFillColor(248, 250, 252);
-      doc.setDrawColor(226, 232, 240);
-      doc.roundedRect(margin, y, contentWidth, 9, 1, 1, 'FD');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`Foto ${pIdx + 1}: ${p.caption}`, margin + 3, y + 4.5);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Horário: ${p.timestamp || '--:--'} | Etapa: ${p.stage || 'Geral'}`, margin + 3, y + 7.5);
-      if (p.googleDriveUrl) {
-        doc.setTextColor(37, 99, 235);
-        doc.text('Arquivo salvo no Google Drive da Obra', margin + contentWidth - 65, y + 6);
+    const cardGap = 4;
+    const isSinglePhoto = rdo.photoAttachments.length === 1;
+    const cardWidth = isSinglePhoto ? contentWidth : (contentWidth - cardGap) / 2;
+    const cardHeight = isSinglePhoto ? 95 : 78;
+
+    for (let i = 0; i < rdo.photoAttachments.length; i += (isSinglePhoto ? 1 : 2)) {
+      checkPageBreak(cardHeight + 6);
+      const rowPhotos = isSinglePhoto 
+        ? [rdo.photoAttachments[i]] 
+        : rdo.photoAttachments.slice(i, i + 2);
+
+      for (let colIdx = 0; colIdx < rowPhotos.length; colIdx++) {
+        const p = rowPhotos[colIdx];
+        const pIdx = i + colIdx;
+        const cardX = margin + colIdx * (cardWidth + cardGap);
+        const cardY = y;
+
+        // Card background & outline border
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(cardX, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+
+        // Header caption inside card
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(15, 23, 42);
+        const captionText = doc.splitTextToSize(`Foto ${pIdx + 1}: ${p.caption || 'Registro de Campo'}`, cardWidth - 6);
+        doc.text(captionText[0], cardX + 3, cardY + 4.5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Horário: ${p.timestamp || '--:--'} | Etapa: ${p.stage || 'Canteiro de Obras'}`, cardX + 3, cardY + 8);
+
+        // Try to load and embed image
+        const imgBoxX = cardX + 2.5;
+        const imgBoxY = cardY + 10.5;
+        const imgBoxW = cardWidth - 5;
+        const imgBoxH = cardHeight - 13;
+
+        let embedded = false;
+        if (p.url) {
+          try {
+            const loaded = await loadImgData(p.url);
+            if (loaded && loaded.dataUrl) {
+              const imgAspect = loaded.width / (loaded.height || 1);
+              const boxAspect = imgBoxW / imgBoxH;
+              let drawW = imgBoxW;
+              let drawH = imgBoxH;
+              let drawX = imgBoxX;
+              let drawY = imgBoxY;
+
+              if (imgAspect > boxAspect) {
+                drawH = imgBoxW / imgAspect;
+                drawY = imgBoxY + (imgBoxH - drawH) / 2;
+              } else {
+                drawW = imgBoxH * imgAspect;
+                drawX = imgBoxX + (imgBoxW - drawW) / 2;
+              }
+
+              // Embed image into jsPDF document
+              doc.addImage(loaded.dataUrl, 'JPEG', drawX, drawY, drawW, drawH, undefined, 'FAST');
+              embedded = true;
+            }
+          } catch (imgErr) {
+            console.warn('Erro ao inserir imagem no PDF:', imgErr);
+          }
+        }
+
+        if (!embedded) {
+          // Placeholder fallback if image was not accessible
+          doc.setFillColor(241, 245, 249);
+          doc.rect(imgBoxX, imgBoxY, imgBoxW, imgBoxH, 'F');
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(7);
+          doc.setTextColor(148, 163, 184);
+          doc.text('Foto arquivada na pasta Google Drive da Obra', cardX + cardWidth / 2, cardY + cardHeight / 2, { align: 'center' });
+        }
       }
-      y += 11;
-    });
+
+      y += cardHeight + 4;
+    }
   }
 
   // --- ASSINATURAS FORMAIS ---
