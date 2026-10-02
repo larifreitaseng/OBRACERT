@@ -160,9 +160,24 @@ export const GoogleAccountModal: React.FC<GoogleAccountModalProps> = ({
 
           {/* Messages */}
           {errorMessage && (
-            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-800 whitespace-pre-line">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div className="flex-1">{errorMessage}</div>
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2.5 text-xs text-rose-800">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 whitespace-pre-line">{errorMessage}</div>
+              </div>
+              {errorMessage.includes('Firebase Console') && (
+                <div className="pt-1">
+                  <a
+                    href="https://console.firebase.google.com/project/gen-lang-client-0431169862/authentication/settings"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg shadow-xs transition-colors cursor-pointer"
+                  >
+                    <span>Abrir Configurações do Firebase Console</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
             </div>
           )}
 

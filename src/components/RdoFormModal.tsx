@@ -17,6 +17,7 @@ import {
   Package,
   Wrench,
   Camera,
+  Images,
   Calendar,
   Sparkles,
   Info,
@@ -118,6 +119,8 @@ export const RdoFormModal: React.FC<RdoFormModalProps> = ({
   const [newPhotoStage, setNewPhotoStage] = useState('');
   const [newPhotoDriveUrl, setNewPhotoDriveUrl] = useState('');
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
+  const [isCompressingPhotos, setIsCompressingPhotos] = useState(false);
+  const [compressProgressMsg, setCompressProgressMsg] = useState('');
   const [isLocatingDriveFolder, setIsLocatingDriveFolder] = useState(false);
   const [driveSyncMessage, setDriveSyncMessage] = useState<string | null>(null);
 
@@ -264,86 +267,107 @@ export const RdoFormModal: React.FC<RdoFormModalProps> = ({
 
   // Photo upload local (with automatic client-side compression for high speed and minimal payload)
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
+
+    setIsCompressingPhotos(true);
+    setCompressProgressMsg(`Comprimindo e carregando ${files.length} foto(s)...`);
 
     try {
-      const base64 = await compressImageFile(file);
       const now = new Date();
       const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      const newPhoto: PhotoAttachment = {
-        id: Date.now().toString(),
-        url: base64,
-        caption: newPhotoCaption || file.name,
-        timestamp: timeStr,
-        stage: newPhotoStage || 'Canteiro de Obras',
-        googleDriveUrl: newPhotoDriveUrl || '',
-      };
-      setPhotos([...photos, newPhoto]);
+      const loadedPhotos: PhotoAttachment[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (files.length > 1) {
+          setCompressProgressMsg(`Otimizando foto ${i + 1} de ${files.length}...`);
+        }
+        try {
+          const base64 = await compressImageFile(file);
+          if (base64) {
+            const rawName = file.name.replace(/\.[^/.]+$/, '');
+            const photoCaption = files.length === 1 && newPhotoCaption.trim()
+              ? newPhotoCaption.trim()
+              : (newPhotoCaption.trim() ? `${newPhotoCaption.trim()} (${i + 1}/${files.length})` : rawName);
+
+            loadedPhotos.push({
+              id: `${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
+              url: base64,
+              caption: photoCaption,
+              timestamp: timeStr,
+              stage: newPhotoStage || 'Canteiro de Obras',
+              googleDriveUrl: newPhotoDriveUrl || '',
+            });
+          }
+        } catch (fileErr) {
+          console.warn(`Erro ao comprimir foto ${file.name}:`, fileErr);
+        }
+      }
+
+      setPhotos((prev) => [...prev, ...loadedPhotos]);
       setNewPhotoCaption('');
       setNewPhotoStage('');
       setNewPhotoDriveUrl('');
-    } catch (err) {
-      console.warn('Image compression note:', err);
+    } finally {
+      setIsCompressingPhotos(false);
+      setCompressProgressMsg('');
+      e.target.value = '';
     }
   };
 
-  // Direct upload to Google Drive obra folder
+  // Direct upload to Google Drive obra folder (suporta seleção única ou múltipla)
   const handleUploadDirectlyToDrive = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
 
     setIsUploadingToDrive(true);
-    setDriveSyncMessage('Conectando ao Google Drive e enviando foto...');
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const caption = newPhotoCaption || file.name;
+    const baseCaption = newPhotoCaption || '';
     const stage = newPhotoStage || 'Canteiro de Obras';
 
     try {
       const folderId = extractFolderIdFromUrl(googleDriveLink) || undefined;
-      const uploaded = await uploadRdoAttachmentToDrive({
-        file,
-        fileName: `${rdoNumber || 'RDO'}_${file.name}`,
-        mimeType: file.type || 'image/jpeg',
-        folderId,
-        rdoNumber,
-        projectName: selectedProject?.name,
-        caption,
-      });
+      const uploadedPhotosList: PhotoAttachment[] = [];
 
-      const newPhoto: PhotoAttachment = {
-        id: Date.now().toString(),
-        url: uploaded.thumbnailLink || uploaded.webViewLink,
-        caption,
-        timestamp: timeStr,
-        stage,
-        googleDriveUrl: uploaded.webViewLink,
-      };
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setDriveSyncMessage(`Enviando foto ${i + 1} de ${files.length} para o Google Drive...`);
+        const caption = files.length === 1 && baseCaption ? baseCaption : (baseCaption ? `${baseCaption} (${i + 1})` : file.name);
 
-      setPhotos((prev) => [...prev, newPhoto]);
-      setDriveSyncMessage(`Foto salva com sucesso no Google Drive: ${uploaded.name}`);
+        const uploaded = await uploadRdoAttachmentToDrive({
+          file,
+          fileName: `${rdoNumber || 'RDO'}_${file.name}`,
+          mimeType: file.type || 'image/jpeg',
+          folderId,
+          rdoNumber,
+          projectName: selectedProject?.name,
+          caption,
+          userUid: userProfile?.uid,
+        });
+
+        uploadedPhotosList.push({
+          id: `${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
+          url: uploaded.thumbnailLink || uploaded.webViewLink,
+          caption,
+          timestamp: timeStr,
+          stage,
+          googleDriveUrl: uploaded.webViewLink,
+        });
+      }
+
+      setPhotos((prev) => [...prev, ...uploadedPhotosList]);
+      setDriveSyncMessage(`Sucesso: ${files.length} foto(s) enviada(s) para o Google Drive!`);
       setNewPhotoCaption('');
       setNewPhotoStage('');
       setNewPhotoDriveUrl('');
     } catch (err: any) {
       console.error('Erro no upload para Google Drive:', err);
-      alert(`Falha no upload para o Google Drive: ${err.message}. A foto será carregada em cópia local.`);
-      // Fallback to local with compression
-      try {
-        const base64 = await compressImageFile(file);
-        const newPhoto: PhotoAttachment = {
-          id: Date.now().toString(),
-          url: base64,
-          caption,
-          timestamp: timeStr,
-          stage,
-          googleDriveUrl: '',
-        };
-        setPhotos((prev) => [...prev, newPhoto]);
-      } catch (e) {}
+      alert(`Falha no upload para o Google Drive: ${err.message}.`);
     } finally {
       setIsUploadingToDrive(false);
+      e.target.value = '';
     }
   };
 
@@ -1412,6 +1436,7 @@ export const RdoFormModal: React.FC<RdoFormModalProps> = ({
                   </div>
 
                   <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                    {/* Botão Anexar pelo Link do Drive */}
                     <button
                       type="button"
                       onClick={handleAddDriveAttachment}
@@ -1423,31 +1448,69 @@ export const RdoFormModal: React.FC<RdoFormModalProps> = ({
                       }`}
                     >
                       <FolderOpen className="w-3.5 h-3.5" />
-                      <span>Anexar pelo Link do Drive</span>
+                      <span>Anexar Link Drive</span>
                     </button>
 
-                    <label className={`flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer transition-colors shadow-xs ${isUploadingToDrive ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {/* Botão Upload Direto para Google Drive (Múltiplas Fotos) */}
+                    <label className={`flex items-center justify-center gap-1.5 py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer transition-colors shadow-xs ${isUploadingToDrive ? 'opacity-50 pointer-events-none' : ''}`}>
                       <Upload className="w-3.5 h-3.5" />
-                      <span>{isUploadingToDrive ? 'Enviando ao Drive...' : 'Upload Direto para Google Drive'}</span>
+                      <span>{isUploadingToDrive ? 'Enviando ao Drive...' : 'Upload Direto no Drive'}</span>
                       <input
                         type="file"
                         accept="image/*,application/pdf"
+                        multiple
                         onChange={handleUploadDirectlyToDrive}
                         className="hidden"
                         disabled={isUploadingToDrive}
                       />
                     </label>
 
-                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg cursor-pointer transition-colors shadow-xs">
+                    {/* Botão Câmera no Local (Abre a câmera do celular/tablet para foto ao vivo) */}
+                    <label
+                      title="Abre a câmera do celular ou tablet para tirar foto no canteiro de obras"
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg cursor-pointer transition-transform hover:scale-102 shadow-xs"
+                    >
                       <Camera className="w-3.5 h-3.5" />
-                      <span>Upload Foto Local</span>
+                      <span>📸 Tirar Foto no Local (Câmera)</span>
                       <input
                         type="file"
                         accept="image/*"
+                        capture="environment"
                         onChange={handlePhotoUpload}
                         className="hidden"
+                        disabled={isCompressingPhotos}
                       />
                     </label>
+
+                    {/* Botão Selecionar Várias Fotos da Galeria */}
+                    <label
+                      title="Selecione uma ou dezenas de fotos de uma única vez da galeria ou computador"
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg cursor-pointer transition-transform hover:scale-102 shadow-xs"
+                    >
+                      <Images className="w-3.5 h-3.5 text-amber-400" />
+                      <span>🖼️ Selecionar Várias Fotos</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                        disabled={isCompressingPhotos}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Feedback visual durante compressão/carregamento múltiplo de fotos */}
+                  {isCompressingPhotos && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-900 flex items-center gap-2 animate-pulse">
+                      <span className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></span>
+                      <span className="font-semibold">{compressProgressMsg || 'Otimizando fotos selecionadas...'}</span>
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-slate-500 flex items-center justify-between px-1">
+                    <span>💡 <strong>Dica de Produtividade:</strong> Use <strong>"Tirar Foto"</strong> para registrar diretamente na obra ou <strong>"Selecionar Várias Fotos"</strong> para carregar dezenas de imagens simultaneamente com compressão automática.</span>
+                    <span className="font-bold text-slate-700">{photos.length} foto(s) no relatório</span>
                   </div>
                 </div>
 

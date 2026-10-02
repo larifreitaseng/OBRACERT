@@ -69,14 +69,26 @@ export const RdoList: React.FC<RdoListProps> = ({
         if (onSaveRdo && res.updatedRdo) {
           await onSaveRdo(res.updatedRdo);
         }
-        if ((res as any).note) {
-          alert(`✅ ${(res as any).note}`);
-        } else {
-          alert(`✅ RDO ${rdo.rdoNumber} salvo no Google Drive com sucesso!\n\nPasta da Obra: ${res.folderName}\nPDF Oficial: ${res.pdfName || 'Gerado'}\nFotos sincronizadas: ${res.photosUploaded}`);
+        const openNow = window.confirm(
+          `✅ RDO ${rdo.rdoNumber} salvo no Google Drive com sucesso!\n\n` +
+          `📁 Pasta Fixa da Obra: ${res.folderName}\n` +
+          `📄 PDF Oficial do Diário de Obra salvo na pasta\n` +
+          `📸 Fotos de campo sincronizadas: ${res.photosUploaded}\n\n` +
+          `Deseja abrir a pasta da obra no Google Drive agora?`
+        );
+        if (openNow && res.folderUrl) {
+          window.open(res.folderUrl, '_blank');
         }
       } else {
-        if (!res.error?.includes('cancelad')) {
-          alert(`Aviso: ${res.error}`);
+        if (res.error?.includes('Domínios Autorizados') || res.error?.includes('autorizado')) {
+          const openConsole = window.confirm(
+            `${res.error}\n\nDeseja abrir o Firebase Console agora para adicionar "${window.location.hostname}"?`
+          );
+          if (openConsole) {
+            window.open('https://console.firebase.google.com/project/gen-lang-client-0431169862/authentication/settings', '_blank');
+          }
+        } else if (!res.error?.includes('cancelad') && !res.error?.includes('fechada')) {
+          alert(`Não foi possível salvar no Google Drive:\n\n${res.error}`);
         }
       }
     } catch (err: any) {

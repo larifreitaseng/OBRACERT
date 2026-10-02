@@ -66,8 +66,53 @@ export function extractFolderIdFromUrl(url: string): string | null {
 }
 
 /**
+ * Tenta solicitar o token de acesso do Google Drive diretamente via Google Identity Services (GIS).
+ * Isto contorna restrições de domínios no Firebase Auth quando o app é executado no Netlify ou domínios customizados.
+ */
+export function requestGoogleAccessTokenViaGis(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('Ambiente sem window'));
+      return;
+    }
+
+    const oAuthClientId = '596099900954-6qnpgb8rdemfd61gq58dtp01tms6vh92.apps.googleusercontent.com';
+    const googleObj = (window as any).google;
+
+    if (!googleObj?.accounts?.oauth2) {
+      reject(new Error('Google Identity Services ainda não está pronto. Aguarde um instante e tente novamente.'));
+      return;
+    }
+
+    try {
+      const client = googleObj.accounts.oauth2.initTokenClient({
+        client_id: oAuthClientId,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        prompt: 'select_account',
+        callback: (resp: any) => {
+          if (resp?.access_token) {
+            resolve(resp.access_token);
+          } else if (resp?.error) {
+            reject(new Error(resp.error_description || resp.error));
+          } else {
+            reject(new Error('Nenhum token retornado pelo Google Identity Services.'));
+          }
+        },
+        error_callback: (err: any) => {
+          reject(err);
+        },
+      });
+
+      client.requestAccessToken({ prompt: 'select_account' });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
  * Garante que temos um token de acesso válido para o Google Drive para o usuário especificado.
- * Se não houver em cache/storage, solicita autenticação via popup do Google com seletor de contas.
+ * Se não houver em cache/storage, solicita autenticação com seletor de contas.
  */
 export async function ensureDriveAccessToken(userUid?: string): Promise<string> {
   const currentToken = getUserDriveToken(userUid);
@@ -75,32 +120,54 @@ export async function ensureDriveAccessToken(userUid?: string): Promise<string> 
     return currentToken;
   }
 
+  // 1. Tentar primeiro via Firebase Auth Popup
   try {
     googleProvider.setCustomParameters({ prompt: 'select_account' });
     const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
-    if (!token) {
-      throw new Error('Não foi possível obter o token de acesso do Google Drive.');
+    if (token) {
+      setUserDriveToken(token, userUid);
+      return token;
     }
-    setUserDriveToken(token, userUid);
-    return token;
   } catch (error: any) {
     if (error?.code === 'auth/popup-closed-by-user' || error?.message?.includes('popup-closed-by-user')) {
-      const friendlyErr = new Error('Janela de conexão fechada pelo usuário.');
+      const friendlyErr = new Error('Janela de conexão com Google fechada pelo usuário.');
       (friendlyErr as any).code = 'auth/popup-closed-by-user';
       throw friendlyErr;
     }
+
+    // Se o domínio não estiver autorizado no Firebase Auth (ex: Netlify ou host personalizado)
     if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
-      const friendlyErr = new Error('auth/unauthorized-domain');
-      (friendlyErr as any).code = 'auth/unauthorized-domain';
-      throw friendlyErr;
+      console.info('Domínio não autorizado no Firebase Auth. Tentando autenticação direta via Google Identity Services (GIS)...');
+      try {
+        const gisToken = await requestGoogleAccessTokenViaGis();
+        if (gisToken) {
+          setUserDriveToken(gisToken, userUid);
+          return gisToken;
+        }
+      } catch (gisError: any) {
+        console.warn('Erro ao obter token via GIS:', gisError);
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'obracert.netlify.app';
+        const helpfulErr = new Error(
+          `Para gravar e sincronizar seus relatórios diretamente no Google Drive a partir de "${host}":\n\n` +
+          `1. Acesse o Firebase Console (https://console.firebase.google.com)\n` +
+          `2. Vá em Authentication > Settings > Authorized Domains (Domínios Autorizados)\n` +
+          `3. Adicione o domínio: "${host}"\n\n` +
+          `Após autorizar, clique novamente em "Salvar no Drive". A pasta da obra será criada e fixada automaticamente!`
+        );
+        (helpfulErr as any).code = 'auth/unauthorized-domain';
+        throw helpfulErr;
+      }
     }
+
     console.warn('Erro na autenticação com Google Drive:', error);
     throw new Error(
       error?.message || 'Falha ao autenticar com a conta Google para acesso ao Drive.'
     );
   }
+
+  throw new Error('Não foi possível obter o token de acesso do Google Drive.');
 }
 
 /**
@@ -462,6 +529,18 @@ export async function backupRdoToDrive(
       folderId = createdFolder.id;
       folderName = createdFolder.name;
       folderUrl = createdFolder.webViewLink;
+
+      // Salvar permanentemente a pasta fixa na Obra no banco de dados Firestore e LocalStorage
+      if (project?.id) {
+        try {
+          const { saveProject } = await import('./dbService');
+          project.googleDriveFolderUrl = folderUrl;
+          project.googleDriveFolderId = folderId;
+          await saveProject(project);
+        } catch (projErr) {
+          console.warn('Não foi possível salvar pasta fixa na Obra:', projErr);
+        }
+      }
     }
 
     // 3. Gerar PDF oficial do Relatório Diário de Obra
@@ -554,32 +633,14 @@ export async function backupRdoToDrive(
     }
 
     if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
-      // Direct Fallback for Netlify and custom domains:
-      // 1. Generate and download the official PDF with photos embedded directly
-      try {
-        const { generateRdoPdf } = await import('./pdfService');
-        await generateRdoPdf(rdo, project, company);
-      } catch (pdfErr) {
-        console.warn('Erro ao gerar PDF no fallback:', pdfErr);
-      }
-
-      // 2. Open the Obra's Google Drive folder directly in a new tab
-      const driveFolderUrl = project?.googleDriveFolderUrl || rdo.googleDriveLink || 'https://drive.google.com';
-      if (typeof window !== 'undefined' && driveFolderUrl) {
-        window.open(driveFolderUrl, '_blank');
-      }
-
       const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'obracert.netlify.app';
-
       return {
-        success: true,
-        folderUrl: driveFolderUrl,
-        folderName: project?.name || rdo.projectName,
-        pdfName: `${rdo.rdoNumber}_${rdo.date}.pdf`,
-        photosUploaded: rdo.photoAttachments?.length || 0,
+        success: false,
+        folderUrl: '',
+        folderName: '',
+        photosUploaded: 0,
         updatedRdo: rdo,
-        error: undefined,
-        note: `Relatório em PDF com fotos baixado com sucesso e pasta da obra aberta no Google Drive!\n\n(Dica Netlify: Para upload 100% automático em 2º plano, adicione '${currentHost}' em Domínios Autorizados no Firebase Console).`,
+        error: `O domínio "${currentHost}" precisa ser adicionado aos Domínios Autorizados do Firebase para permitir a criação automática de pastas e upload de arquivos no Google Drive.\n\nComo autorizar:\n1. Acesse https://console.firebase.google.com\n2. Vá em Authentication > Settings > Authorized Domains\n3. Clique em "Adicionar domínio" e digite: ${currentHost}\n\nFeito isso, clique novamente em "Salvar no Drive".`,
       };
     }
     console.error('Erro no backup para Google Drive:', error);

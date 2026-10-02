@@ -41,6 +41,7 @@ export interface Project {
   status: 'Em andamento' | 'Paralisada' | 'Concluída';
   overallProgressPercent: number;
   googleDriveFolderUrl: string;
+  googleDriveFolderId?: string;
   createdBy: string;
   createdAt: string;
 }

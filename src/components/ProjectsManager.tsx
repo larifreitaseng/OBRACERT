@@ -48,6 +48,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
   const [status, setStatus] = useState<'Em andamento' | 'Paralisada' | 'Concluída'>('Em andamento');
   const [overallProgressPercent, setOverallProgressPercent] = useState<number>(20);
   const [googleDriveFolderUrl, setGoogleDriveFolderUrl] = useState('');
+  const [googleDriveFolderId, setGoogleDriveFolderId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLocatingDrive, setIsLocatingDrive] = useState(false);
   const [driveMsg, setDriveMsg] = useState<string | null>(null);
@@ -60,9 +61,10 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
     setIsLocatingDrive(true);
     setDriveMsg(null);
     try {
-      const folder = await findOrCreateObraFolder(name.trim(), code.trim());
+      const folder = await findOrCreateObraFolder(name.trim(), code.trim(), userProfile?.uid);
       setGoogleDriveFolderUrl(folder.webViewLink);
-      setDriveMsg(`Pasta vinculada: "${folder.name}"`);
+      setGoogleDriveFolderId(folder.id);
+      setDriveMsg(`Pasta fixa vinculada: "${folder.name}"`);
     } catch (err: any) {
       console.error('Erro ao conectar pasta no Google Drive:', err);
       alert(`Falha ao conectar com Google Drive: ${err.message}`);
@@ -84,6 +86,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
     setStatus('Em andamento');
     setOverallProgressPercent(0);
     setGoogleDriveFolderUrl('');
+    setGoogleDriveFolderId('');
     setModalOpen(true);
   };
 
@@ -100,6 +103,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
     setStatus(p.status);
     setOverallProgressPercent(p.overallProgressPercent);
     setGoogleDriveFolderUrl(p.googleDriveFolderUrl);
+    setGoogleDriveFolderId(p.googleDriveFolderId || '');
     setModalOpen(true);
   };
 
@@ -125,6 +129,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
         status: status || 'Em andamento',
         overallProgressPercent: Number(overallProgressPercent) || 0,
         googleDriveFolderUrl: googleDriveFolderUrl.trim() || '',
+        googleDriveFolderId: googleDriveFolderId.trim() || undefined,
         createdBy: editingProject?.createdBy || userProfile.uid,
         createdAt: editingProject?.createdAt || new Date().toISOString(),
       };

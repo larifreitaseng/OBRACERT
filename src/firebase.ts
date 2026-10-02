@@ -132,6 +132,45 @@ export async function connectUserGoogleDrive(currentProfile: UserProfile): Promi
     await saveUserProfile(updatedProfile);
     return { updatedProfile, accessToken };
   } catch (error: any) {
+    if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
+      console.info('Tentando conexão com Google Drive via GIS no domínio customizado...');
+      try {
+        const { requestGoogleAccessTokenViaGis } = await import('./services/driveService');
+        const token = await requestGoogleAccessTokenViaGis();
+        if (token) {
+          setUserDriveToken(token, currentProfile.uid);
+          let googleEmail = currentProfile.email;
+          let googleName = currentProfile.displayName;
+          let googleAvatar = currentProfile.photoURL;
+          try {
+            const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (userinfoRes.ok) {
+              const info = await userinfoRes.json();
+              googleEmail = info.email || googleEmail;
+              googleName = info.name || googleName;
+              googleAvatar = info.picture || googleAvatar;
+            }
+          } catch (e) {}
+
+          const updatedProfile: UserProfile = {
+            ...currentProfile,
+            googleDriveConnected: true,
+            googleDriveEmail: googleEmail,
+            googleDriveName: googleName,
+            googleDriveAvatar: googleAvatar,
+            googleDriveLinkedAt: new Date().toISOString(),
+          };
+
+          await saveUserProfile(updatedProfile);
+          return { updatedProfile, accessToken: token };
+        }
+      } catch (gisErr) {
+        console.warn('GIS Fallback note:', gisErr);
+      }
+    }
+
     console.error('Erro ao conectar Google Drive do usuário:', error);
     throw error;
   }
